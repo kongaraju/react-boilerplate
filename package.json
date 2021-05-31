@@ -1,11 +1,11 @@
 {
-  "name": "react-boilerplate",
+  "name": "covid-booking-ui",
   "description": "",
   "version": "0.1.0",
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "https://github.build.ge.com/APM-UI-Extensions/aux-react-boilerplate.git"
+    "url": ""
   },
   "author": "APM UI Extensions",
   "license": "ISC",
@@ -19,10 +19,14 @@
   },
   "dependencies": {
     "@craco/craco": "^6.1.2",
+    "@date-io/date-fns": "1.3.13",
     "@emotion/react": "^11.1.5",
     "@emotion/styled": "^11.3.0",
     "@material-ui/core": "^4.11.4",
+    "@material-ui/data-grid": "^4.0.0-alpha.29",
     "@material-ui/icons": "^4.11.2",
+    "@material-ui/lab": "^4.0.0-alpha.58",
+    "@material-ui/pickers": "^3.3.10",
     "@reduxjs/toolkit": "^1.5.1",
     "@testing-library/jest-dom": "^5.12.0",
     "@testing-library/react": "^11.2.6",
@@ -33,9 +37,11 @@
     "@types/react-dom": "^17.0.3",
     "@types/react-redux": "^7.1.16",
     "axios": "^0.21.1",
+    "date-fns": "^2.22.1",
     "env-cmd": "^10.1.0",
     "husky": "^6.0.0",
     "lint-staged": "^10.5.4",
+    "node-forge": "^0.10.0",
     "node-sass": "^5.0.0",
     "prettier": "^2.2.1",
     "react": "^17.0.2",
