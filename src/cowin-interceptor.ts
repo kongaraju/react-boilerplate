@@ -1,13 +1,15 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 
-const cowinInterceptor = (accessToken: any) => {
+const cowinInterceptor = () => {
+    
     axios.interceptors.request.use(
         (config: AxiosRequestConfig) => {
             const newConfig = config;
+            const accessToken = localStorage.getItem('accessToken');
             const baseOverrideHeaders = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36',
-                'origin': 'https://selfregistration.cowin.gov.in/',
-                'referer': 'https://selfregistration.cowin.gov.in/',
+                // 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36',
+                // 'origin': 'https://selfregistration.cowin.gov.in/',
+                // 'referer': 'https://selfregistration.cowin.gov.in/',
                 'Authorization': `Bearer ${accessToken}`
             };
             newConfig.headers = {...newConfig.headers, ...baseOverrideHeaders};
@@ -23,6 +25,11 @@ const cowinInterceptor = (accessToken: any) => {
             return response;
         },
         async (error: AxiosError) => {
+            
+            if(hasAnError(error, 401)){
+                localStorage.removeItem("accessToken");
+            }
+
             // const originalRequest = error.config;
             // const loginurl = `${environment.serviceEndpoint}/login`;
             // if (hasAnError(error, 401) && originalRequest.url === loginurl) {

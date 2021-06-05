@@ -1,6 +1,6 @@
 import AjaxRequestHandler from './common/http_handler/ajaxrequest_handler';
 import cowinInterceptor from './cowin-interceptor';
-import { format, addDays } from 'date-fns';
+import { format, addDays, parse } from 'date-fns';
 var forge = require('node-forge');
 let client: AjaxRequestHandler;
 const baseCowinAPIUrl = 'https://cdn-api.co-vin.in/api/v2/';
@@ -31,8 +31,9 @@ const refineBeneficiaries = (beneficiaries: any) => {
             vaccinated = true;
             let days_remaining: number = vaccine_dose2_duedate(beneficiary["vaccine"]);
 
-            // let dose1_date=format(new Date(beneficiary["dose1_date"]), 'dd MMM');
-            beneficiary["dose2_due_date"] = format(addDays(new Date(beneficiary["dose1_date"]), days_remaining), 'dd MMM yy');
+            
+            beneficiary["dose2_due_date"] = format(addDays(parse(beneficiary["dose1_date"], "dd-MM-yyyy", new Date()), days_remaining), 'dd MMM yy');
+            beneficiary["dose1_date"] = format(parse(beneficiary["dose1_date"], "dd-MM-yyyy", new Date()), 'dd MMM');
         }
 
         tmp = {
@@ -75,9 +76,14 @@ class CowinClient {
     constructor(config: any) {
         this.config = config;
         this.cowinAjaxClient = cowinAjaxClient();
+        cowinInterceptor();
     }
     setConfig(config: any) {
-        this.config = config;
+        this.config = {...this.config, ...config};
+        localStorage.setItem('cowinConfig', JSON.stringify(this.config));
+    }
+    isAuthenticated(): boolean{
+        return !!localStorage.getItem("accessToken");
     }
     sendOTP() {
         const data = {
@@ -91,7 +97,7 @@ class CowinClient {
                 console.log(response);
             });
     }
-    validateOTP(otp: string) {
+    validateOTP(otp: number) {
         var md = forge.md.sha256.create();
         md.update(otp);
         const data = {
@@ -103,15 +109,39 @@ class CowinClient {
                 console.log("validate OTP Response");
                 console.log(response);
                 this.accessToken = response.data['token'];
-                cowinInterceptor(this.accessToken);
-                // return Promise.resolve();
+                localStorage.setItem("accessToken", this.accessToken);
+                return Promise.resolve();
             });
     }
     getBeneficiaries() {
-        return this.cowinAjaxClient.post('auth/validateMobileOtp')
+        return this.cowinAjaxClient.get('appointment/beneficiaries')
             .then((response: any) => {
                 return refineBeneficiaries(response.data['beneficiaries']);
             });
+    }
+    getStates(){
+        return this.cowinAjaxClient.get('admin/location/states')
+        .then((response: any)=>{
+            return response.data["states"];
+        });
+    }
+    getDistricts(stateId: string){
+        return this.cowinAjaxClient.get(`admin/location/districts/${stateId}`)
+        .then((response: any)=>{
+            return response.data['districts'];
+        });
+    }
+    getCentersByDistrict(districtId: number, date: any){
+        return this.cowinAjaxClient.get(`appointment/sessions/calendarByDistrict?district_id=${districtId}&date=${date}`)
+        .then((response: any)=> response.data["centers"]);
+    }
+    getCaptcha(){
+        return this.cowinAjaxClient.post('auth/getRecaptcha')
+        .then((response: any)=> response.data["captcha"]);
+    }
+    bookAppointment(details: any){
+        return this.cowinAjaxClient.post('appointment/schedule', details)
+        .then((response: any)=> response.data["captcha"]);
     }
 }
 
