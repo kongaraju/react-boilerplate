@@ -1,3 +1,4 @@
+/* eslint-disable no-throw-literal */
 import axios, { AxiosError, AxiosResponse } from 'axios';
 
 class AjaxRequestHandler {
