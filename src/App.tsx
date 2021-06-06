@@ -1,5 +1,5 @@
 import "./App.scss";
-import React from "react";
+import React, { useState } from "react";
 import _ from "lodash";
 
 import { AuthenticationForm, BeneficiariesTable, PincodesInput } from "./components";
@@ -56,7 +56,7 @@ import MuiAlert, { AlertProps } from '@material-ui/lab/Alert';
 
 import CowinClient from "./cowin-client";
 
-import {Beneficiary, Preferences, District, State} from './common/interfaces';
+import { Beneficiary, Preferences, District, State } from './common/interfaces';
 
 function Alert(props: AlertProps) {
   return <MuiAlert elevation={6} variant="filled" {...props} />;
@@ -71,7 +71,7 @@ const useStyles = makeStyles((theme: Theme) =>
     title: {
       flexGrow: 1,
     },
-    "mobile-otp-block":{
+    "mobile-otp-block": {
       maxWidth: "300px",
       padding: "10px"
     },
@@ -171,51 +171,54 @@ function App() {
   const classes = useStyles();
   // const theme = useTheme();
 
-  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean>(
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(
     cowinClient.isAuthenticated()
   );
-  const [isConfigured, setIsConfigured] = React.useState<boolean>(validatePreferences(preferences));
-  
-  const [frequency, setFrequency] = React.useState<number>(10);
-  const [beneficiaries, setBeneficiaries] = React.useState<Beneficiary[]>([]);
-  const [selectedBeneficiaries, setSelectedBeneficiaries] = React.useState<
+  const [isConfigured, setIsConfigured] = useState<boolean>(validatePreferences(preferences));
+
+  const [frequency, setFrequency] = useState<number>(10);
+  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
+  const [selectedBeneficiaries, setSelectedBeneficiaries] = useState<
     string[]
   >(preferences.selectedBeneficiaries || []);
-  const [searchPreference, setSearchPreference] = React.useState<string>(
+  const [searchPreference, setSearchPreference] = useState<string>(
     "stateanddistrict"
   );
-  const [states, setStates] = React.useState<State[]>([]);
-  const [selectedState, setSelectedState] = React.useState(
+  const [states, setStates] = useState<State[]>([]);
+  const [selectedState, setSelectedState] = useState(
     preferences.selectedState || ""
   );
-  const [districts, setDistricts] = React.useState<District[]>([]);
-  const [selectedDistricts, setSelectedDistricts] = React.useState<number[]>(
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [selectedDistricts, setSelectedDistricts] = useState<number[]>(
     preferences.selectedDistricts || []
   );
-  
-  const [vaccinePreference, setVaccinePreference] = React.useState<string>(
+
+  const [vaccinePreference, setVaccinePreference] = useState<string>(
     "nopreference"
   );
-  const [paymentPreference, setPaymentPreference] = React.useState<string[]>([
+  const [paymentPreference, setPaymentPreference] = useState<string[]>([
     "Free",
     "Paid",
   ]);
-  const [selectedDate, setSelectedDate] = React.useState<Date | number>(
+  const [selectedDate, setSelectedDate] = useState<Date | number>(
     getTomorrow()
   );
-  const [automateCaptcha, setAutomateCaptcha] = React.useState<boolean>(true);
-  const [availableCenters, setAvaiableCenters] = React.useState([]);
-  const [countDown, setCountDown] = React.useState<number>(0);
-  const [countDownPercent, setCountDownPercent] = React.useState<number>(0);
-  const [availableSlots, setAvaiableSlots] = React.useState([]);
-  const [captcha, setCaptcha] = React.useState("");
-  const [captchaValue, setCaptchaValue] = React.useState("");
-  const [openSnackbar, setOpenSnackbar] = React.useState(false);
-  const [statusMessage, setStatusMessage] = React.useState("");
+  const [automateCaptcha, setAutomateCaptcha] = useState<boolean>(true);
+  const [availableCenters, setAvaiableCenters] = useState([]);
+  const [countDown, setCountDown] = useState<number>(0);
+  const [countDownPercent, setCountDownPercent] = useState<number>(0);
+  const [availableSlots, setAvaiableSlots] = useState([]);
+  const [captcha, setCaptcha] = useState("");
+  const [captchaValue, setCaptchaValue] = useState("");
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [alertSeverity, setAlertSeverity] = useState<any>("success");
 
-  const showStatusUpdate = (msg: string) => {
+  const showStatusUpdate = (msg: string, severity: string = "success") => {
+    setAlertSeverity(severity)
     setOpenSnackbar(true);
     setStatusMessage(msg);
+
   }
 
   const handleCaptchaValueChange = (
@@ -224,17 +227,48 @@ function App() {
     setCaptchaValue(event.target.value as string);
   };
 
- 
 
-  const handleGetOTP = (mobile: number) => {
-    if(cowinClient.isAuthenticated()){
+
+  const handleGetOTP = (mobile: number, automateOtp: boolean) => {
+    if (cowinClient.isAuthenticated()) {
       return;
     }
     cowinClient.setConfig({
-      mobile: mobile,
+      mobile,
+      automateOtp
     });
-    cowinClient.sendOTP();
+    if (!automateOtp) {
+      sendOTP();
+    } else {
+      cowinClient.clearKvdbBucket()
+        .then(sendOTP)
+        .then(pollForOTP);
+    }
+  };
 
+  const sendOTP = () => {
+    return cowinClient.sendOTP()
+      .then(() => showStatusUpdate("OTP sent to mobile successfully"));
+  }
+
+  const pollForOTP = () => {
+    const interval = setInterval(() => {
+      showStatusUpdate("Waiting for OTP...", "info")
+      cowinClient.getKvdbOTP()
+        .then((response: any) => {
+          let text = "";
+          if (response && response.Item && response.Item.text) {
+            text = response.Item.text;
+          }
+          if (!text.length) {
+            return;
+          }
+          clearInterval(interval);
+          const otp = cowinDataAdapter.stripOTPFromText(text);
+          handleOTPChange(otp);
+
+        });
+    }, 5 * 1000)
   };
 
   const handleCaptchaAutomationPreferenceChange = (
@@ -244,18 +278,20 @@ function App() {
   };
 
   const handleOTPChange = (otp: number) => {
-    
-      cowinClient
-        .validateOTP(otp)
-        .then(() => {
-          setIsAuthenticated(cowinClient.isAuthenticated());
-          showStatusUpdate("Authenticated Successfully!");
-          getBeneficiaries();
-        });
+
+    cowinClient
+      .validateOTP(otp)
+      .then(() => {
+        setIsAuthenticated(cowinClient.isAuthenticated());
+        showStatusUpdate("Authenticated Successfully!");
+        getBeneficiaries();
+      });
   };
 
   const getBeneficiaries = () => {
-    return cowinClient.getBeneficiaries().then(loadBeneficiaries);
+    return cowinClient.getBeneficiaries()
+      .then((beneficiaries) => cowinDataAdapter.refineBeneficiaries(beneficiaries))
+      .then(loadBeneficiaries);
   };
 
   const loadBeneficiaries = (beneficiariesList: any) => {
@@ -327,7 +363,7 @@ function App() {
     setFrequency(event.target.value as number);
   };
 
-  
+
   const handleSearchOption = (
     event: React.MouseEvent<HTMLElement>,
     newSearchOption: string
@@ -336,13 +372,13 @@ function App() {
   };
 
   const handleSavePreferences = () => {
-    
-      cowinClient.setConfig(getPreferences());
-      setIsConfigured(validatePreferences(getPreferences()));
-      shouldPollSearchQueries = true;
-      getBeneficiaries()
-        .then(pollSearchQueries);
-    
+
+    cowinClient.setConfig(getPreferences());
+    setIsConfigured(validatePreferences(getPreferences()));
+    shouldPollSearchQueries = true;
+    getBeneficiaries()
+      .then(pollSearchQueries);
+
   };
 
   const getCentersByDistrict = () => {
@@ -500,15 +536,15 @@ function App() {
       </AppBar>
 
       <section>
-      {isAuthenticated && (<LinearProgress />)}
-        <Snackbar open={openSnackbar} autoHideDuration={6000}>
-          <Alert severity="success">
+        {isAuthenticated && (<LinearProgress />)}
+        <Snackbar open={openSnackbar} autoHideDuration={5000}>
+          <Alert severity={alertSeverity}>
             {statusMessage}
           </Alert>
         </Snackbar>
         <Grid container>
           <Grid item xs={12} className="authentication-block">
-          <AuthenticationForm classes={classes} isAuthenticated={isAuthenticated} handleGetOTP={handleGetOTP} handleOTPChange={handleOTPChange} />
+            <AuthenticationForm classes={classes} isAuthenticated={isAuthenticated} handleGetOTP={handleGetOTP} handleOTPChange={handleOTPChange} />
           </Grid>
           {isAuthenticated && (
             <React.Fragment>

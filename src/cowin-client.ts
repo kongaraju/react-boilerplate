@@ -1,10 +1,14 @@
 import AjaxRequestHandler from './common/http_handler/ajaxrequest_handler';
 import cowinInterceptor from './cowin-interceptor';
-import { format, addDays, parse } from 'date-fns';
+import CowingDataAdapter from './common/cowin-data-adapter';
+
+import jwtDecode, { JwtPayload } from "jwt-decode";
+import {intervalToDuration, formatRelative } from 'date-fns';
+
 var forge = require('node-forge');
 let client: AjaxRequestHandler;
 const baseCowinAPIUrl = 'https://cdn-api.co-vin.in/api/v2/';
-const baseKvdbAPIUrl = 'https://kvdb.io/ASth4wnvVDPkg2bdjsiqMN/';
+const baseKvdbAPIUrl = 'https://r8mmtri5kh.execute-api.us-west-2.amazonaws.com/items/'; //'https://kvdb.io/HKC2ypxKZn9UfSuvRDaEDw/';
 
 export const cowinAjaxClient = () => {
     const serviceEndpoint: string = baseCowinAPIUrl;
@@ -20,62 +24,18 @@ export const kvdbAjaxClient = () => {
     const client = new AjaxRequestHandler(serviceEndpoint);
     return client;
 };
-
-const refineBeneficiaries = (beneficiaries: any) => {
-    return beneficiaries.map((beneficiary: any) => {
-        let vaccinated = false;
-        let tmp;
-        beneficiary["age"] = new Date().getFullYear() - beneficiary["birth_year"];
-
-        if (beneficiary["vaccination_status"] === "Partially Vaccinated") {
-            vaccinated = true;
-            let days_remaining: number = vaccine_dose2_duedate(beneficiary["vaccine"]);
-
-            
-            beneficiary["dose2_due_date"] = format(addDays(parse(beneficiary["dose1_date"], "dd-MM-yyyy", new Date()), days_remaining), 'dd MMM yy');
-            beneficiary["dose1_date"] = format(parse(beneficiary["dose1_date"], "dd-MM-yyyy", new Date()), 'dd MMM');
-        }
-
-        tmp = {
-            "id": beneficiary["beneficiary_reference_id"],
-            "name": beneficiary["name"],
-            "vaccine": beneficiary["vaccine"],
-            "age": beneficiary["age"],
-            "status": beneficiary["vaccination_status"],
-            "dose1_date": beneficiary["dose1_date"],
-            "due_date": ""
-        };
-        if (vaccinated) {
-            tmp["due_date"] = beneficiary["dose2_due_date"];
-        }
-        return tmp;
-    });
-}
-
-const vaccine_dose2_duedate = (vaccine_type: string): number => {
-
-    const covishield_due_date = 84
-    const covaxin_due_date = 28
-    const sputnikV_due_date = 21
-
-    if (vaccine_type === "COVISHIELD")
-        return covishield_due_date;
-    else if (vaccine_type === "COVAXIN")
-        return covaxin_due_date;
-    else if (vaccine_type === "SPUTNIK V")
-        return sputnikV_due_date;
-    else
-        return 0;
-}
-
 class CowinClient {
     cowinAjaxClient: AjaxRequestHandler;
+    kvdbAjaxClient: AjaxRequestHandler;
+    cowinDataAdapter: CowingDataAdapter;
     config: any;
     otpTxnId: any;
     accessToken: any;
     constructor(config: any) {
         this.config = config;
         this.cowinAjaxClient = cowinAjaxClient();
+        this.kvdbAjaxClient = kvdbAjaxClient();
+        this.cowinDataAdapter = new CowingDataAdapter();
         cowinInterceptor();
     }
     setConfig(config: any) {
@@ -83,7 +43,22 @@ class CowinClient {
         localStorage.setItem('cowinConfig', JSON.stringify(this.config));
     }
     isAuthenticated(): boolean{
-        return !!localStorage.getItem("accessToken");
+        const token = localStorage.getItem("accessToken");
+        if(!token){
+            return false;
+        }
+
+        const decoded = jwtDecode<JwtPayload>(token);
+        console.log(decoded);
+        if(!decoded.exp){
+            return false;
+        }
+
+        const duration:Duration = intervalToDuration({
+            start: new Date(), 
+            end: new Date(decoded.exp * 1000)
+        });
+        return !!duration.minutes || !!duration.seconds;
     }
     sendOTP() {
         const data = {
@@ -91,11 +66,18 @@ class CowinClient {
             "secret": "U2FsdGVkX183gVkBeZTA5ipKYnQsMj7a0oyZ3lG9tDTEhUP8o+tmEdxRFxVUddzPLTLRn4iDm9nFmNQy46QcRQ==",
         };
 
-        this.cowinAjaxClient.post('auth/generateMobileOTP', data)
+        return this.cowinAjaxClient.post('auth/generateMobileOTP', data)
             .then((response: any) => {
                 this.otpTxnId = response.data['txnId'];
                 console.log(response);
             });
+    }
+    clearKvdbBucket(){
+        return this.kvdbAjaxClient.put(this.config.mobile, "");
+    }
+    getKvdbOTP(){
+        return this.kvdbAjaxClient.get(this.config.mobile)
+        .then(response=>response.data as string);
     }
     validateOTP(otp: number) {
         var md = forge.md.sha256.create();
@@ -116,7 +98,7 @@ class CowinClient {
     getBeneficiaries() {
         return this.cowinAjaxClient.get('appointment/beneficiaries')
             .then((response: any) => {
-                return refineBeneficiaries(response.data['beneficiaries']);
+                return response.data['beneficiaries'];
             });
     }
     getStates(){

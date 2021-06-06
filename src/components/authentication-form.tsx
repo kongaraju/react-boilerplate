@@ -1,47 +1,64 @@
-import React from "react";
+import React, { useState } from "react";
 import { Grid, FormControl, TextField, Button, FormControlLabel, Switch } from "@material-ui/core";
 const MOBILE_INPUT_ERROR_TEXT = "Enter a valid mobile number!";
+const OTP_INPUT_ERROR_TEXT = "Enter a valid OTP!";
 
 const AuthenticationForm = (props: any) => {
-    const [mobile, setMobile] = React.useState<number | undefined>();
-    const [automateOtp, setAutomateOTP] = React.useState<boolean>(true);
-    const [otp, setOTP] = React.useState<number | undefined>();
-    const [mobileInputErrorText, setMobileInputErrorText] = React.useState<string>("");
+    const [mobile, setMobile] = useState<number>();
+    const [automateOtp, setAutomateOTP] = useState<boolean>(true);
+    const [otp, setOTP] = useState<number | undefined>();
+    const [mobileInputErrorText, setMobileInputErrorText] = useState<string>("");
+    const [otpInputErrorText, setOtpInputErrorText] = useState<string>("");
 
     const handleOTPAutomationPreferenceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         setAutomateOTP(event.target.checked as boolean);
     };
 
     const handleMobileChange = (event: React.ChangeEvent<{ value: unknown }>) => {
-        setMobile(event.target.value as number);
-        const isValidMobile = validateMobile();
-        const hasError = mobileInputErrorText !== ""; 
-        if(isValidMobile && hasError){
+        let value = event.target.value as number;
+        setMobile(value);
+        const isValidMobile = validateMobile(value);
+        const hasError = mobileInputErrorText !== "";
+        if (isValidMobile && hasError) {
             let errorText = isValidMobile ? "" : MOBILE_INPUT_ERROR_TEXT;
             setMobileInputErrorText(errorText);
         }
     };
 
     const handleGetOTP = () => {
-        const isValidMobile = validateMobile();
+        const isValidMobile = validateMobile(mobile);
         let errorText = isValidMobile ? "" : MOBILE_INPUT_ERROR_TEXT;
         setMobileInputErrorText(errorText);
-        if(!isValidMobile){
-            return; 
+        if (!isValidMobile) {
+            return;
         }
-        props.handleGetOTP(mobile);
+        props.handleGetOTP(mobile, automateOtp);
     };
 
-    const validateMobile = () => (mobile !== undefined && mobile.toString().length < 10);
-
-    const handleOTPChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.value.length === 6) {
-            props.handleOTPChange(parseInt(event.target.value) as number)
-        }
-        setOTP(parseInt(event.target.value) as number);
+    const validateMobile = (mobile: number | undefined) => {
+        return mobile !== undefined && mobile.toString().length === 10;
     };
 
-    
+    const validateOTP = (otp: number | undefined) => {
+        return otp !== undefined && otp.toString().length === 6;
+    };
+
+    const handleOTPValidation = () => {
+        const isValidOTP = validateOTP(otp);
+        let errorText = isValidOTP ? "" : OTP_INPUT_ERROR_TEXT;
+        setOtpInputErrorText(errorText);
+    };
+
+    const handleOTPChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+        const value = event.target.value as number;
+        const isValidOTP = validateOTP(value);
+        if (isValidOTP) {
+            props.handleOTPChange(value)
+        }
+        setOTP(value);
+    };
+
+
     return (
         <Grid
             container
@@ -81,7 +98,7 @@ const AuthenticationForm = (props: any) => {
                     <Button
                         variant="contained"
                         color="primary"
-                        hidden={props.isAuthenticated}
+                        disabled={props.isAuthenticated}
                         onClick={handleGetOTP}
                     >
                         Get OTP
@@ -101,25 +118,33 @@ const AuthenticationForm = (props: any) => {
                         labelPlacement="start"
                     />
                 </FormControl>
-                <FormControl fullWidth variant="filled" className={props.classes.formControl}>
-                    <TextField
-                        id="mobile-otp"
-                        label="OTP"
-                        type="number"
-                        required
-                        disabled={props.isAuthenticated}
-                        value={otp || ""}
-                        placeholder="******"
-                        onChange={handleOTPChange}
-                        InputLabelProps={{
-                            shrink: true,
-                        }}
-                        inputProps={{ maxLength: 6, minLength: 6 }}
-                        variant="standard"
-                        fullWidth
-                        className={props.classes.textField}
-                    />
-                </FormControl>
+                {!automateOtp && validateMobile(mobile) &&
+                    <FormControl fullWidth variant="filled" className={props.classes.formControl}>
+                        <TextField
+                            id="mobile-otp"
+                            label="OTP"
+                            type="number"
+                            required
+                            error={otpInputErrorText !== ""}
+                            helperText={otpInputErrorText}
+                            disabled={props.isAuthenticated}
+                            value={otp || ""}
+                            placeholder="******"
+                            onChange={handleOTPChange}
+                            onBlur={handleOTPValidation}
+                            InputLabelProps={{
+                                shrink: true,
+                            }}
+                            inputProps={{ 
+                                maxLength: 6, 
+                                minLength: 6 
+                            }}
+                            variant="standard"
+                            fullWidth
+                            className={props.classes.textField}
+                        />
+                    </FormControl>
+                }
             </Grid>
         </Grid>
     );
